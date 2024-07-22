@@ -1,7 +1,7 @@
 import * as core from '@actions/core'
 import * as fs from 'fs'
-import * as path from 'path'
 import {minimatch} from 'minimatch'
+import * as path from 'path'
 import {S3} from './s3'
 import {CacheControl, RemoteFile, RemoteFiles, SyncFile} from './types'
 
