@@ -1,10 +1,10 @@
-import {DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand, S3Client} from '@aws-sdk/client-s3'
-import * as mime from 'mime-types'
-import fs from 'fs'
 import * as core from '@actions/core'
-import {minimatch} from 'minimatch'
-import {RemoteFiles, SyncFile, CacheControl} from './types'
+import {DeleteObjectsCommand, ListObjectsV2Command, PutObjectCommand, S3Client} from '@aws-sdk/client-s3'
 import async from 'async'
+import fs from 'fs'
+import * as mime from 'mime-types'
+import {minimatch} from 'minimatch'
+import {CacheControl, RemoteFiles, SyncFile} from './types'
 
 export class S3 {
     private client: S3Client
@@ -55,12 +55,20 @@ export class S3 {
     }
 
     async uploadFiles(syncFiles: SyncFile[]): Promise<void> {
-        const queue = async.queue((syncFile: SyncFile, callback) => {
+        const queue = async.queue((syncFile: SyncFile, callback: async.ErrorCallback<Error>) => {
             this.uploadFile(syncFile, callback)
         }, 10)
 
-        await queue.push(syncFiles)
-        await queue.drain()
+        queue.push(syncFiles)
+        return new Promise<void>((resolve, reject) => {
+            queue.drain(() => {
+                resolve()
+            })
+
+            queue.error(err => {
+                reject(err)
+            })
+        })
     }
 
     private uploadFile(syncFile: SyncFile, callback: async.ErrorCallback<Error>): void {
@@ -72,6 +80,7 @@ export class S3 {
         core.info(`Uploading s3://${this.bucket}/${destFile} (type=${contentType}; Cache-Control=${cacheControl})`)
 
         if (this.dryRun) {
+            callback()
             return
         }
 
@@ -86,7 +95,7 @@ export class S3 {
         })
         this.client.send(command, err => {
             if (err) {
-                core.error(`Error uploading to ${destFile}`)
+                core.error(`Error uploading to ${destFile}: ${err}`)
             } else {
                 core.debug(`Uploaded ${destFile}`)
             }

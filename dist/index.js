@@ -41,8 +41,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(42186));
 const fs = __importStar(__nccwpck_require__(57147));
-const path = __importStar(__nccwpck_require__(71017));
 const minimatch_1 = __nccwpck_require__(61953);
+const path = __importStar(__nccwpck_require__(71017));
 const s3_1 = __nccwpck_require__(81863);
 const types_1 = __nccwpck_require__(88164);
 function run() {
@@ -242,12 +242,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.S3 = void 0;
-const client_s3_1 = __nccwpck_require__(19250);
-const mime = __importStar(__nccwpck_require__(43583));
-const fs_1 = __importDefault(__nccwpck_require__(57147));
 const core = __importStar(__nccwpck_require__(42186));
-const minimatch_1 = __nccwpck_require__(61953);
+const client_s3_1 = __nccwpck_require__(19250);
 const async_1 = __importDefault(__nccwpck_require__(57888));
+const fs_1 = __importDefault(__nccwpck_require__(57147));
+const mime = __importStar(__nccwpck_require__(43583));
+const minimatch_1 = __nccwpck_require__(61953);
 class S3 {
     constructor(bucket, prefix, cacheControl, dryRun) {
         this.client = new client_s3_1.S3Client({});
@@ -293,8 +293,15 @@ class S3 {
             const queue = async_1.default.queue((syncFile, callback) => {
                 this.uploadFile(syncFile, callback);
             }, 10);
-            yield queue.push(syncFiles);
-            yield queue.drain();
+            queue.push(syncFiles);
+            return new Promise((resolve, reject) => {
+                queue.drain(() => {
+                    resolve();
+                });
+                queue.error(err => {
+                    reject(err);
+                });
+            });
         });
     }
     uploadFile(syncFile, callback) {
@@ -303,6 +310,7 @@ class S3 {
         const cacheControl = this.resolveCacheControl(syncFile.filename);
         core.info(`Uploading s3://${this.bucket}/${destFile} (type=${contentType}; Cache-Control=${cacheControl})`);
         if (this.dryRun) {
+            callback();
             return;
         }
         const command = new client_s3_1.PutObjectCommand({
@@ -316,7 +324,7 @@ class S3 {
         });
         this.client.send(command, err => {
             if (err) {
-                core.error(`Error uploading to ${destFile}`);
+                core.error(`Error uploading to ${destFile}: ${err}`);
             }
             else {
                 core.debug(`Uploaded ${destFile}`);
